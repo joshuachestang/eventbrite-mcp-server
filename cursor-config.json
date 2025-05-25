@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "eventbrite": {
+      "command": "node",
+      "args": ["/Users/joshuachestang/Apps/eventbrite-mcp-server/dist/index.js"],
+      "env": {
+        "EVENTBRITE_API_TOKEN": "YOUR_EVENTBRITE_API_TOKEN_HERE"
+      }
+    }
+  }
+} 
