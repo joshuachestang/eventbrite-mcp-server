@@ -1,0 +1,50 @@
+{
+  "name": "eventbrite-mcp-server",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for Eventbrite API integration. Create and manage events using natural language through AI agents like Claude Desktop and Cursor IDE.",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "npm run build && node --watch dist/index.js",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "test": "node test.js",
+    "setup": "./setup.sh",
+    "setup:cursor": "./setup-cursor.sh"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.5",
+    "typescript": "^5.5.3"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "eventbrite",
+    "api",
+    "events",
+    "ai",
+    "claude",
+    "cursor",
+    "natural-language",
+    "event-management"
+  ],
+  "author": "Joshua Chestang",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joshuachestang/eventbrite-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/joshuachestang/eventbrite-mcp-server/issues"
+  },
+  "homepage": "https://github.com/joshuachestang/eventbrite-mcp-server#readme",
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  }
+}

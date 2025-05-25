@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "eventbrite": {
+      "command": "node",
+      "args": ["/absolute/path/to/cyber-guard/src/mcp-servers/eventbrite/dist/index.js"],
+      "env": {
+        "EVENTBRITE_API_KEY": "YOUR_EVENTBRITE_API_KEY_HERE",
+        "EVENTBRITE_ORGANIZATION_ID": "YOUR_ORGANIZATION_ID_HERE"
+      }
+    }
+  }
+} 
