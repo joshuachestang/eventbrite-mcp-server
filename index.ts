@@ -459,7 +459,12 @@ class EventbriteMCPServer {
       eventData.subcategory_id = subcategory_id;
     }
 
-    const response = await this.makeEventbriteRequest('POST', '/events/', {
+    // Use organization endpoint for event creation
+    const endpoint = this.config.organizationId 
+      ? `/organizations/${this.config.organizationId}/events/`
+      : '/events/';
+    
+    const response = await this.makeEventbriteRequest('POST', endpoint, {
       event: eventData,
     });
 
@@ -485,11 +490,12 @@ class EventbriteMCPServer {
       params.status = status;
     }
 
-    if (this.config.organizationId) {
-      params.organization_id = this.config.organizationId;
-    }
+    // Use organization events endpoint if organization ID is available
+    const endpoint = this.config.organizationId 
+      ? `/organizations/${this.config.organizationId}/events/`
+      : '/users/me/owned_events/';
 
-    const response = await this.makeEventbriteRequest('GET', '/events/search/', params);
+    const response = await this.makeEventbriteRequest('GET', endpoint, params);
 
     const eventsList = response.events.map((event: any) => ({
       id: event.id,
