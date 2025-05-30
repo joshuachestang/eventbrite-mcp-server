@@ -269,6 +269,34 @@ class EventbriteMCPServer {
             },
           },
           {
+            name: 'delete_event',
+            description: 'Delete an event (permanently removes the event)',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                event_id: {
+                  type: 'string',
+                  description: 'The ID of the event to delete',
+                },
+              },
+              required: ['event_id'],
+            },
+          },
+          {
+            name: 'delete_canceled_events',
+            description: 'Delete all events that are marked as canceled',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                confirm: {
+                  type: 'boolean',
+                  description: 'Set to true to confirm deletion of all canceled events',
+                },
+              },
+              required: ['confirm'],
+            },
+          },
+          {
             name: 'list_categories',
             description: 'List available event categories',
             inputSchema: {
@@ -310,6 +338,50 @@ class EventbriteMCPServer {
               required: ['name'],
             },
           },
+          {
+            name: 'create_webhook',
+            description: 'Create a webhook for Eventbrite events',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                endpoint_url: {
+                  type: 'string',
+                  description: 'The URL where webhook notifications will be sent',
+                },
+                actions: {
+                  type: 'string',
+                  description: 'Comma-separated list of actions to trigger webhook (e.g., "order.placed,attendee.updated,event.published")',
+                },
+                event_id: {
+                  type: 'string',
+                  description: 'Optional: Specific event ID to monitor (leave empty for all events)',
+                },
+              },
+              required: ['endpoint_url', 'actions'],
+            },
+          },
+          {
+            name: 'list_webhooks',
+            description: 'List all webhooks for the organization',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+            },
+          },
+          {
+            name: 'delete_webhook',
+            description: 'Delete a webhook',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                webhook_id: {
+                  type: 'string',
+                  description: 'The ID of the webhook to delete',
+                },
+              },
+              required: ['webhook_id'],
+            },
+          },
         ],
       };
     });
@@ -338,10 +410,20 @@ class EventbriteMCPServer {
             return await this.publishEvent(args);
           case 'cancel_event':
             return await this.cancelEvent(args);
+          case 'delete_event':
+            return await this.deleteEvent(args);
+          case 'delete_canceled_events':
+            return await this.deleteCanceledEvents(args);
           case 'list_categories':
             return await this.listCategories();
           case 'create_venue':
             return await this.createVenue(args);
+          case 'create_webhook':
+            return await this.createWebhook(args);
+          case 'list_webhooks':
+            return await this.listWebhooks();
+          case 'delete_webhook':
+            return await this.deleteWebhook(args);
           default:
             throw new McpError(
               ErrorCode.MethodNotFound,
@@ -361,19 +443,28 @@ class EventbriteMCPServer {
   }
 
   private async makeEventbriteRequest(
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     endpoint: string,
     data?: any
   ) {
-    const response = await axios({
+    const config: any = {
       method,
       url: `${EVENTBRITE_API_BASE}${endpoint}`,
       headers: {
         'Authorization': `Bearer ${this.config.apiKey}`,
         'Content-Type': 'application/json',
       },
-      data,
-    });
+    };
+
+    // For GET requests, use params for query parameters
+    // For POST/PATCH requests, use data for request body
+    if (method === 'GET' && data) {
+      config.params = data;
+    } else if (data) {
+      config.data = data;
+    }
+
+    const response = await axios(config);
     return response.data;
   }
 
@@ -425,11 +516,11 @@ class EventbriteMCPServer {
       },
       start: {
         timezone,
-        utc: new Date(start_date).toISOString(),
+        utc: new Date(start_date).toISOString().replace('.000Z', 'Z'),
       },
       end: {
         timezone,
-        utc: new Date(end_date).toISOString(),
+        utc: new Date(end_date).toISOString().replace('.000Z', 'Z'),
       },
       currency,
       online_event,
@@ -554,14 +645,14 @@ class EventbriteMCPServer {
     if (start_date && timezone) {
       updateData.start = {
         timezone,
-        utc: new Date(start_date).toISOString(),
+        utc: new Date(start_date).toISOString().replace('.000Z', 'Z'),
       };
     }
 
     if (end_date && timezone) {
       updateData.end = {
         timezone,
-        utc: new Date(end_date).toISOString(),
+        utc: new Date(end_date).toISOString().replace('.000Z', 'Z'),
       };
     }
 
@@ -604,6 +695,76 @@ class EventbriteMCPServer {
         {
           type: 'text',
           text: `Event canceled successfully!\n\nEvent ID: ${event_id}\nStatus: ${response.status}`,
+        },
+      ],
+    };
+  }
+
+  private async deleteEvent(args: any) {
+    const { event_id } = args;
+
+    const response = await this.makeEventbriteRequest('DELETE', `/events/${event_id}/`);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Event deleted successfully!\n\nEvent ID: ${event_id}`,
+        },
+      ],
+    };
+  }
+
+  private async deleteCanceledEvents(args: any) {
+    const { confirm } = args;
+
+    if (!confirm) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        'Confirmation not provided. Please set confirm to true to delete all canceled events.'
+      );
+    }
+
+    // First, get all canceled events
+    const listResponse = await this.listEvents({ status: 'canceled' });
+    
+    // Extract event IDs from the response
+    const canceledEventsResponse = await this.makeEventbriteRequest('GET', 
+      this.config.organizationId 
+        ? `/organizations/${this.config.organizationId}/events/`
+        : '/users/me/owned_events/', 
+      { status: 'canceled' }
+    );
+
+    const canceledEvents = canceledEventsResponse.events || [];
+    
+    if (canceledEvents.length === 0) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'No canceled events found to delete.',
+          },
+        ],
+      };
+    }
+
+    // Delete each canceled event
+    const deletionResults = [];
+    for (const event of canceledEvents) {
+      try {
+        await this.makeEventbriteRequest('DELETE', `/events/${event.id}/`);
+        deletionResults.push(`✅ Deleted: ${event.name.text} (ID: ${event.id})`);
+      } catch (error) {
+        deletionResults.push(`❌ Failed to delete: ${event.name.text} (ID: ${event.id}) - ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Deletion of canceled events completed!\n\nTotal canceled events found: ${canceledEvents.length}\n\nResults:\n${deletionResults.join('\n')}`,
         },
       ],
     };
@@ -653,6 +814,62 @@ class EventbriteMCPServer {
         {
           type: 'text',
           text: `Venue created successfully!\n\nVenue ID: ${response.id}\nName: ${response.name}\nAddress: ${response.address.localized_address_display}`,
+        },
+      ],
+    };
+  }
+
+  private async createWebhook(args: any) {
+    const { endpoint_url, actions, event_id } = args;
+
+    const response = await this.makeEventbriteRequest('POST', '/webhooks/', {
+      endpoint_url,
+      actions,
+      event_id,
+    });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Webhook created successfully!\n\nWebhook ID: ${response.id}\nEndpoint URL: ${response.endpoint_url}\nActions: ${response.actions.join(', ')}\nEvent ID: ${response.event_id || 'All events'}`,
+        },
+      ],
+    };
+  }
+
+  private async listWebhooks() {
+    const response = await this.makeEventbriteRequest('GET', '/webhooks/');
+
+    const webhooksList = response.webhooks.map((webhook: any) => ({
+      id: webhook.id,
+      endpoint_url: webhook.endpoint_url,
+      actions: webhook.actions,
+      event_id: webhook.event_id,
+    }));
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Available Webhooks:\n\n${webhooksList
+            .map((webhook: any) => `• ID: ${webhook.id}\n  Endpoint URL: ${webhook.endpoint_url}\n  Actions: ${webhook.actions}\n  Event ID: ${webhook.event_id}`)
+            .join('\n\n')}`,
+        },
+      ],
+    };
+  }
+
+  private async deleteWebhook(args: any) {
+    const { webhook_id } = args;
+
+    const response = await this.makeEventbriteRequest('DELETE', `/webhooks/${webhook_id}/`);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Webhook deleted successfully!\n\nWebhook ID: ${webhook_id}`,
         },
       ],
     };
